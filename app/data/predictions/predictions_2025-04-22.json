@@ -1,0 +1,211 @@
+{
+  "Quantum Hardware Engineer": {
+    "status": "success",
+    "prediction_date": "2025-04-22 20:58:35",
+    "job_title": "Quantum Hardware Engineer",
+    "salary_prediction": {
+      "min_salary": 6683.43,
+      "max_salary": 8795.48,
+      "avg_salary": 7739.45,
+      "trend": "stable",
+      "confidence": 0.7
+    },
+    "job_postings_prediction": {
+      "weekly_postings": 1,
+      "trend": "increasing",
+      "confidence": 0.7,
+      "top_companies": [
+        "IBM"
+      ]
+    }
+  },
+  "Blockchain Developer": {
+    "status": "success",
+    "prediction_date": "2025-04-22 20:58:35",
+    "job_title": "Blockchain Developer",
+    "salary_prediction": {
+      "min_salary": 5113.43,
+      "max_salary": 8080.26,
+      "avg_salary": 6596.84,
+      "trend": "decreasing",
+      "confidence": 0.7
+    },
+    "job_postings_prediction": {
+      "weekly_postings": 1,
+      "trend": "increasing",
+      "confidence": 0.7,
+      "top_companies": [
+        "KMS Technology - Mexico",
+        "W3Schools.com"
+      ]
+    }
+  },
+  "Full Stack Developer": {
+    "status": "success",
+    "prediction_date": "2025-04-22 20:58:35",
+    "job_title": "Full Stack Developer",
+    "salary_prediction": {
+      "min_salary": 2989.58,
+      "max_salary": 4703.92,
+      "avg_salary": 3846.75,
+      "trend": "increasing",
+      "confidence": 0.7
+    },
+    "job_postings_prediction": {
+      "weekly_postings": 1,
+      "trend": "stable",
+      "confidence": 0.7,
+      "top_companies": [
+        "Google",
+        "Adobe"
+      ]
+    }
+  },
+  "Cybersecurity Analyst": {
+    "status": "success",
+    "prediction_date": "2025-04-22 20:58:35",
+    "job_title": "Cybersecurity Analyst",
+    "salary_prediction": {
+      "min_salary": 4753.68,
+      "max_salary": 7033.86,
+      "avg_salary": 5893.77,
+      "trend": "stable",
+      "confidence": 0.9
+    },
+    "job_postings_prediction": {
+      "weekly_postings": 1,
+      "trend": "increasing",
+      "confidence": 0.9,
+      "top_companies": [
+        "Viettel Group",
+        "Cisco",
+        "Oracle"
+      ]
+    }
+  },
+  "Network Cybersecurity Analyst": {
+    "status": "success",
+    "prediction_date": "2025-04-22 20:58:35",
+    "job_title": "Network Cybersecurity Analyst",
+    "salary_prediction": {
+      "min_salary": 4957.19,
+      "max_salary": 7867.81,
+      "avg_salary": 6412.5,
+      "trend": "decreasing",
+      "confidence": 0.7
+    },
+    "job_postings_prediction": {
+      "weekly_postings": 1,
+      "trend": "decreasing",
+      "confidence": 0.7,
+      "top_companies": [
+        "Cisco"
+      ]
+    }
+  },
+  "Cloud Infrastructure Engineer": {
+    "status": "success",
+    "prediction_date": "2025-04-22 20:58:35",
+    "job_title": "Cloud Infrastructure Engineer",
+    "salary_prediction": {
+      "min_salary": 4456.67,
+      "max_salary": 7210.52,
+      "avg_salary": 5833.59,
+      "trend": "decreasing",
+      "confidence": 0.7
+    },
+    "job_postings_prediction": {
+      "weekly_postings": 1,
+      "trend": "stable",
+      "confidence": 0.7,
+      "top_companies": [
+        "Dell Technologies",
+        "Oracle"
+      ]
+    }
+  },
+  "Printer Systems Engineer": {
+    "status": "success",
+    "prediction_date": "2025-04-22 20:58:35",
+    "job_title": "Printer Systems Engineer",
+    "salary_prediction": {
+      "min_salary": 4406.5,
+      "max_salary": 7188.98,
+      "avg_salary": 5797.74,
+      "trend": "increasing",
+      "confidence": 0.7
+    },
+    "job_postings_prediction": {
+      "weekly_postings": 1,
+      "trend": "increasing",
+      "confidence": 0.7,
+      "top_companies": [
+        "HP Inc."
+      ]
+    }
+  },
+  "AI Research Scientist": {
+    "status": "success",
+    "prediction_date": "2025-04-22 20:58:35",
+    "job_title": "AI Research Scientist",
+    "salary_prediction": {
+      "min_salary": 7214.47,
+      "max_salary": 10402.05,
+      "avg_salary": 8808.26,
+      "trend": "stable",
+      "confidence": 0.7
+    },
+    "job_postings_prediction": {
+      "weekly_postings": 1,
+      "trend": "increasing",
+      "confidence": 0.7,
+      "top_companies": [
+        "Microsoft",
+        "Salesforce"
+      ]
+    }
+  },
+  "AI Hardware Engineer": {
+    "status": "success",
+    "prediction_date": "2025-04-22 20:58:35",
+    "job_title": "AI Hardware Engineer",
+    "salary_prediction": {
+      "min_salary": 5993.18,
+      "max_salary": 8613.39,
+      "avg_salary": 7303.28,
+      "trend": "increasing",
+      "confidence": 0.7
+    },
+    "job_postings_prediction": {
+      "weekly_postings": 1,
+      "trend": "increasing",
+      "confidence": 0.7,
+      "top_companies": [
+        "NVIDIA"
+      ]
+    }
+  },
+  "Frontend Developer": {
+    "status": "success",
+    "prediction_date": "2025-04-22 20:58:35",
+    "job_title": "Frontend Developer",
+    "salary_prediction": {
+      "min_salary": 2502.15,
+      "max_salary": 3985.0,
+      "avg_salary": 3243.58,
+      "trend": "stable",
+      "confidence": 0.85
+    },
+    "job_postings_prediction": {
+      "weekly_postings": 1,
+      "trend": "decreasing",
+      "confidence": 0.85,
+      "top_companies": [
+        "VNG Corporation",
+        "W3Schools.com",
+        "Shopee",
+        "Tiki Corporation"
+      ]
+    }
+  }
+}

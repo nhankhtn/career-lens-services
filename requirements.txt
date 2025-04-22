@@ -3,4 +3,9 @@ uvicorn
 pydantic
 pandas
 openai
-python-dotenv 
+python-dotenv
+schedule
+numpy
+pymongo
+motor
+dnspython 

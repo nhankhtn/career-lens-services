@@ -33,10 +33,10 @@ A FastAPI backend that provides career guidance for IT and data professionals ba
 Start the FastAPI server:
 
 ```
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8001
 ```
 
-The API will be available at `http://localhost:8000`.
+The API will be available at `http://localhost:8001`.
 
 ## API Endpoints
 
@@ -66,5 +66,61 @@ The API will be available at `http://localhost:8000`.
 ## API Documentation
 
 Once the server is running, you can access:
-- Interactive API documentation: `http://localhost:8000/docs`
-- Alternative documentation: `http://localhost:8000/redoc` 
+- Interactive API documentation: `http://localhost:8001/docs`
+- Alternative documentation: `http://localhost:8001/redoc`
+
+# IT Job Data Converter
+
+This repository contains scripts to convert the IT_Job.ts TypeScript file to CSV format.
+
+## Files
+
+- `IT_Job.ts` - Original TypeScript file containing job posting data
+- `convert_to_csv.js` - Node.js script to convert the TS file to CSV
+- `convert_to_csv.py` - Python script to convert the TS file to CSV
+
+## Instructions
+
+### Using the Node.js Script
+
+1. Make sure you have Node.js installed on your system
+2. Open a terminal in the project directory
+3. Run the script:
+
+```bash
+node convert_to_csv.js
+```
+
+The script will:
+- Read the IT_Job.ts file
+- Parse the job postings data
+- Generate a CSV file named `job_postings.csv` in the same directory
+
+### Using the Python Script
+
+1. Make sure you have Python 3.x installed on your system
+2. Open a terminal in the project directory
+3. Run the script:
+
+```bash
+python convert_to_csv.py
+```
+
+The script will:
+- Read the IT_Job.ts file
+- Extract job postings data using regular expressions
+- Generate a CSV file named `job_postings.csv` in the same directory
+
+## CSV Format
+
+The resulting CSV file contains the following columns:
+
+1. `job_title` - Title of the job position
+2. `salary_min` - Minimum salary for the position
+3. `salary_max` - Maximum salary for the position
+4. `company_id` - Name of the company
+5. `job_description` - Full description of the job
+6. `position` - Position category
+7. `yof` - Years of experience level (Senior, Mid-level, Junior, etc.)
+8. `date_posted` - Date when the job was posted
+9. `skills` - List of required skills (semicolon-separated) 

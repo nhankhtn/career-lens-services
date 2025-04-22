@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.schemas.career import CareerGuidanceRequest, CareerGuidanceResponse
 from app.services.openai_service import OpenAIService
 from app.core.config import DATA_FILE_PATH
+from typing import Dict, List, Any
 
 router = APIRouter(
     prefix="/career",
@@ -32,4 +33,8 @@ async def get_career_guidance(
     if response["status"] == "error":
         raise HTTPException(status_code=500, detail=response["message"])
     
-    return response 
+    # Parse guidance string into an array using '\n' as separator
+    if response.get("guidance"):
+        response["guidance"] = response["guidance"].split('\n')
+    
+    return response

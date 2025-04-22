@@ -17,7 +17,7 @@ class OpenAIService:
         
         Args:
             education: User's education background
-            skills: User's current skills
+            skills: List of user's current skills
             experience: User's work experience
             certificates: User's certificates
             target_job: User's target job
@@ -49,6 +49,9 @@ class OpenAIService:
             "target_job": target_job
         }
         
+        # Convert skills list to a comma-separated string for the prompt
+        skills_str = ", ".join(skills)
+        
         # Prepare the system prompt with job data
         system_prompt = f"""
         You are a career advisor specialized in IT and data roles. You'll provide personalized career guidance.
@@ -69,7 +72,7 @@ class OpenAIService:
         user_prompt = f"""
         Here's my profile:
         - Education: {education}
-        - Skills: {skills}
+        - Skills: {skills_str}
         - Experience: {experience}
         - Certificates: {certificates}
         - Target job: {target_job}
