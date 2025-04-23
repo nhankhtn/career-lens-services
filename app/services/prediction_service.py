@@ -3,15 +3,21 @@ import numpy as np
 import random
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
+import json
+import logging
+from app.models.ai_error_log import AIErrorLogModel
+from app.models.career_history import CareerHistoryModel
+from app.models.job_posting import JobPostingModel
+
+# Tạo logger
+logger = logging.getLogger(__name__)
 
 class PredictionService:
     """Service to predict job salaries and postings using fake models with fake weights"""
     
-    def __init__(self, data_file_path: str):
-        """Initialize with data file path"""
-        self.data_file_path = data_file_path
-        self.data = self._load_data()
-        # Fake model weights for salary prediction
+    def __init__(self):
+        """Initialize prediction service"""
+        self.data = None  # Không load data ngay lập tức
         self.salary_weights = {
             'job_title': 0.4,
             'position': 0.3,
@@ -21,7 +27,6 @@ class PredictionService:
             'random_factor': 0.1
         }
         
-        # Fake model weights for job postings prediction
         self.postings_weights = {
             'job_title': 0.35,
             'skills_demand': 0.25,
@@ -29,20 +34,45 @@ class PredictionService:
             'seasonality': 0.1,
             'random_factor': 0.1
         }
+        logger.info("PredictionService đã được khởi tạo")
     
-    def _load_data(self) -> pd.DataFrame:
-        """Load job postings data from CSV file"""
+    async def _load_data(self) -> pd.DataFrame:
+        """Load job postings data from MongoDB"""
         try:
-            df = pd.read_csv(self.data_file_path)
-            # Convert date_posted to datetime
-            df['date_posted'] = pd.to_datetime(df['date_posted'])
-            return df
-        except Exception as e:
-            print(f"Error loading data: {e}")
-            # Return empty DataFrame with expected columns if file can't be loaded
-            return pd.DataFrame(columns=['job_title', 'salary_min', 'salary_max', 
+            # Lấy dữ liệu từ MongoDB
+            cutoff_date = datetime.now() - timedelta(days=30 * 6)
+            job_postings = await JobPostingModel.find_by_date_range(cutoff_date, datetime.now())
+            
+            if not job_postings:
+                logger.warning("Không tìm thấy dữ liệu job postings trong MongoDB")
+                return pd.DataFrame(columns=['job_title', 'salary_min', 'salary_max', 
                                          'company_id', 'job_description', 'position', 
                                          'yof', 'date_posted', 'skills'])
+            
+            # Chuyển đổi dữ liệu MongoDB thành DataFrame
+            data = []
+            for posting in job_postings:
+                data.append({
+                    'job_title': posting.get('job_title'),
+                    'salary_min': posting.get('salary_min'),
+                    'salary_max': posting.get('salary_max'),
+                    'company_id': posting.get('company_id'),
+                    'job_description': posting.get('job_description'),
+                    'position': posting.get('position'),
+                    'yof': posting.get('yof'),
+                    'date_posted': posting.get('date_posted'),
+                    'skills': posting.get('skills')
+                })
+            
+            df = pd.DataFrame(data)
+            df['date_posted'] = pd.to_datetime(df['date_posted'])
+            return df
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi tải dữ liệu từ MongoDB: {e}")
+            return pd.DataFrame(columns=['job_title', 'salary_min', 'salary_max', 
+                                     'company_id', 'job_description', 'position', 
+                                     'yof', 'date_posted', 'skills'])
     
     def _get_recent_data(self, months: int = 6) -> pd.DataFrame:
         """Get data from the last N months"""
@@ -237,13 +267,17 @@ class PredictionService:
             "top_companies": top_companies
         }
     
-    def predict_job_market(self,
+    async def predict_job_market(self,
                           job_title: str,
                           position: Optional[str] = None,
                           experience_level: Optional[str] = None,
                           skills: Optional[List[str]] = None) -> Dict[str, Any]:
         """Generate predictions for job salary and postings"""
         try:
+            # Load data nếu chưa có
+            if self.data is None:
+                self.data = await self._load_data()
+            
             # Get salary prediction
             salary_prediction = self._fake_salary_prediction_model(
                 job_title=job_title,
@@ -272,4 +306,129 @@ class PredictionService:
                 "message": str(e),
                 "prediction_date": datetime.now(),
                 "job_title": job_title
-            } 
+            }
+
+    async def _get_popular_job_titles(self, limit: int = 10) -> List[str]:
+        try:
+            cutoff_date = datetime.now() - timedelta(days=30 * 6)
+            job_postings = await JobPostingModel.find_by_date_range(cutoff_date, datetime.now())
+            
+            if not job_postings:
+                logger.warning("Không tìm thấy dữ liệu job postings trong MongoDB")
+                await self._save_error_log(
+                    error_type="DataNotFound",
+                    error_message="Không tìm thấy dữ liệu job postings trong MongoDB",
+                    source="get_popular_job_titles",
+                    additional_data={"limit": limit}
+                )
+                return ["Data Scientist", "Software Engineer", "Frontend Developer", 
+                        "Backend Developer", "DevOps Engineer"]
+            
+            # ... rest of the code ...
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi lấy job titles phổ biến từ MongoDB: {e}")
+            await self._save_error_log(
+                error_type="DatabaseError",
+                error_message=str(e),
+                source="get_popular_job_titles",
+                stack_trace=str(e.__traceback__),
+                additional_data={"limit": limit}
+            )
+            return ["Data Scientist", "Software Engineer", "Frontend Developer", 
+                    "Backend Developer", "DevOps Engineer"]
+
+    async def _save_to_mongodb(self, predictions: Dict[str, Any]):
+        try:
+            for job_title, prediction in predictions.items():
+                career_history_data = {
+                    "job_title": job_title,
+                    "status": prediction["status"],
+                    "prediction_date": datetime.strptime(prediction["prediction_date"], "%Y-%m-%d %H:%M:%S") 
+                        if isinstance(prediction["prediction_date"], str) else prediction["prediction_date"],
+                    "salary_prediction": prediction["salary_prediction"],
+                    "job_postings_prediction": prediction["job_postings_prediction"]
+                }
+                
+                await CareerHistoryModel.create(career_history_data)
+                
+            logger.info("Đã lưu kết quả dự đoán vào MongoDB")
+        except Exception as e:
+            logger.error(f"Lỗi khi lưu kết quả dự đoán vào MongoDB: {e}")
+            await self._save_error_log(
+                error_type="DatabaseError",
+                error_message=str(e),
+                source="save_to_mongodb",
+                stack_trace=str(e.__traceback__),
+                additional_data={"predictions_count": len(predictions)}
+            )
+
+    async def _run_daily_predictions(self):
+        logger.info(f"Đang chạy dự đoán hàng ngày: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        try:
+            job_titles = await self._get_popular_job_titles()
+            date_str = datetime.now().strftime('%Y-%m-%d')
+            file_path = self.predictions_dir / f"predictions_{date_str}.json"
+            
+            predictions = {}
+            for job_title in job_titles:
+                try:
+                    prediction = await self.predict_job_market(
+                        job_title=job_title
+                    )
+                    
+                    if isinstance(prediction.get('prediction_date'), datetime):
+                        prediction['prediction_date'] = prediction['prediction_date'].strftime('%Y-%m-%d %H:%M:%S')
+                        
+                    predictions[job_title] = prediction
+                except Exception as e:
+                    logger.error(f"Lỗi khi dự đoán cho job title {job_title}: {e}")
+                    await self._save_error_log(
+                        error_type="PredictionError",
+                        error_message=str(e),
+                        source="run_daily_predictions",
+                        stack_trace=str(e.__traceback__),
+                        additional_data={"job_title": job_title}
+                    )
+                    continue
+            
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(predictions, f, ensure_ascii=False, indent=2)
+                logger.info(f"Đã lưu kết quả dự đoán vào file: {file_path}")
+            except Exception as e:
+                logger.error(f"Lỗi khi lưu kết quả dự đoán vào file: {e}")
+                await self._save_error_log(
+                    error_type="FileError",
+                    error_message=str(e),
+                    source="run_daily_predictions",
+                    stack_trace=str(e.__traceback__),
+                    additional_data={"file_path": str(file_path)}
+                )
+            
+            await self._save_to_mongodb(predictions)
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi chạy dự đoán hàng ngày: {e}")
+            await self._save_error_log(
+                error_type="SystemError",
+                error_message=str(e),
+                source="run_daily_predictions",
+                stack_trace=str(e.__traceback__)
+            )
+
+    async def _save_error_log(self, error_type: str, error_message: str, source: str, stack_trace: str = None, additional_data: dict = None):
+        """Lưu log lỗi vào MongoDB"""
+        try:
+            error_log = ErrorLogModel(
+                error_type=error_type,
+                error_message=error_message,
+                source=source,
+                stack_trace=stack_trace,
+                additional_data=additional_data
+            )
+            await error_log.save()
+            logger.error(f"Đã lưu log lỗi: {error_type} - {error_message}")
+        except Exception as e:
+            logger.error(f"Lỗi khi lưu log: {e}") 

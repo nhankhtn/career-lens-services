@@ -18,9 +18,9 @@ class CareerHistoryModel:
         return db[cls.collection_name]
     
     @classmethod
-    async def get_async_collection(cls):
+    def get_async_collection(cls):
         """Get MongoDB collection (asynchronous)"""
-        db = await get_async_database()
+        db = get_async_database()
         return db[cls.collection_name]
     
     @classmethod
@@ -30,28 +30,28 @@ class CareerHistoryModel:
         career_history_data["created_at"] = datetime.now()
         career_history_data["updated_at"] = datetime.now()
         
-        collection = await cls.get_async_collection()
+        collection = cls.get_async_collection()
         result = await collection.insert_one(career_history_data)
         return str(result.inserted_id)
     
     @classmethod
     async def find_by_id(cls, id: str) -> Optional[Dict[str, Any]]:
         """Find a career history prediction by ID"""
-        collection = await cls.get_async_collection()
+        collection = cls.get_async_collection()
         result = await collection.find_one({"_id": ObjectId(id)})
         return result
     
     @classmethod
     async def find_by_job_title(cls, job_title: str) -> List[Dict[str, Any]]:
         """Find career history predictions by job title"""
-        collection = await cls.get_async_collection()
+        collection = cls.get_async_collection()
         cursor = collection.find({"job_title": job_title}).sort("prediction_date", -1)
         return await cursor.to_list(length=None)
     
     @classmethod
     async def find_recent(cls, limit: int = 10) -> List[Dict[str, Any]]:
         """Find most recent career history predictions"""
-        collection = await cls.get_async_collection()
+        collection = cls.get_async_collection()
         cursor = collection.find().sort("prediction_date", -1).limit(limit)
         return await cursor.to_list(length=None)
     
@@ -61,7 +61,7 @@ class CareerHistoryModel:
         # Add updated timestamp
         update_data["updated_at"] = datetime.now()
         
-        collection = await cls.get_async_collection()
+        collection = cls.get_async_collection()
         result = await collection.update_one(
             {"_id": ObjectId(id)},
             {"$set": update_data}
@@ -71,6 +71,6 @@ class CareerHistoryModel:
     @classmethod
     async def delete(cls, id: str) -> bool:
         """Delete a career history prediction record"""
-        collection = await cls.get_async_collection()
+        collection = cls.get_async_collection()
         result = await collection.delete_one({"_id": ObjectId(id)})
-        return result.deleted_count > 0 
+        return result.deleted_count > 0
