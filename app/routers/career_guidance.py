@@ -20,7 +20,8 @@ async def get_career_guidance(
     openai_service: OpenAIService = Depends(get_openai_service)
 ):
     """
-    Get personalized career guidance based on user profile and target job
+    Get personalized career guidance based on user profile and target job.
+    Response will be in Vietnamese.
     """
     response = openai_service.generate_career_guidance(
         education=request.education,

@@ -66,6 +66,8 @@ class OpenAIService:
         4. Alternative paths: Similar roles they could consider as stepping stones
         
         Be specific and actionable in your advice.
+        
+        IMPORTANT: Provide your entire response in Vietnamese language.
         """
         
         # Prepare the user prompt with the profile
