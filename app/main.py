@@ -21,5 +21,5 @@ app.include_router(scheduler.router)
 
 @app.get("/")
 async def root():
-    print(f"Connected to database: {db_name}")
+    # print(f"Connected to database: {db_name}")
     return {"message": "Welcome to the IT Career Guidance & Job Market Prediction API"} 
