@@ -39,33 +39,30 @@ class SchedulerService:
         
         logger.info("SchedulerService đã được khởi tạo")
     
-    async def _get_popular_job_titles(self, limit: int = 10) -> List[str]:
-        """Lấy các job title phổ biến nhất từ MongoDB trong 6 tháng gần đây"""
+    async def _get_all_job_titles(self) -> List[str]:
+        """Lấy tất cả các job title duy nhất từ MongoDB"""
         try:
-            # Lấy dữ liệu từ MongoDB trong 6 tháng gần nhất
-            cutoff_date = datetime.now() - timedelta(days=30 * 6)
-            job_postings = await JobPostingModel.find_by_date_range(cutoff_date, datetime.now())
+            # Lấy tất cả dữ liệu từ MongoDB
+            job_postings = await JobPostingModel.find_all()
             
             if not job_postings:
                 logger.warning("Không tìm thấy dữ liệu job postings trong MongoDB")
-                return ["Data Scientist", "Software Engineer", "Frontend Developer", 
-                        "Backend Developer", "DevOps Engineer"]
+                return []
             
-            # Đếm số lượng mỗi job title
-            job_counts = {}
+            # Lấy tất cả các job title duy nhất
+            unique_job_titles = set()
             for posting in job_postings:
                 job_title = posting.get("job_title")
                 if job_title:
-                    job_counts[job_title] = job_counts.get(job_title, 0) + 1
+                    unique_job_titles.add(job_title)
             
-            # Sắp xếp và lấy top N
-            popular_jobs = sorted(job_counts.items(), key=lambda x: x[1], reverse=True)[:limit]
-            return [job[0] for job in popular_jobs]
+            job_titles = list(unique_job_titles)
+            logger.info(f"Đã tìm thấy {len(job_titles)} job titles duy nhất")
+            return job_titles
             
         except Exception as e:
-            logger.error(f"Lỗi khi lấy job titles phổ biến từ MongoDB: {e}")
-            return ["Data Scientist", "Software Engineer", "Frontend Developer", 
-                    "Backend Developer", "DevOps Engineer"]
+            logger.error(f"Lỗi khi lấy job titles từ MongoDB: {e}")
+            return []
     
     async def _save_to_mongodb(self, predictions: Dict[str, Any]):
         """Lưu kết quả dự đoán vào MongoDB"""
@@ -111,7 +108,6 @@ class SchedulerService:
         def run_scheduler():
             while not self.stop_event.is_set():
                 schedule.run_pending()
-                # logger.info("Đã kiểm tra lịch trình")
                 time.sleep(1)
 
         self.scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
@@ -127,12 +123,12 @@ class SchedulerService:
             logger.error(f"Lỗi khi chạy dự đoán hàng ngày: {e}")
     
     async def _run_daily_predictions(self):
-        """Chạy dự đoán hàng ngày cho các job title phổ biến"""
+        """Chạy dự đoán hàng ngày cho tất cả các job title"""
         logger.info(f"Đang chạy dự đoán hàng ngày: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         try:
-            # Lấy danh sách job title phổ biến từ MongoDB
-            job_titles = await self._get_popular_job_titles()
+            # Lấy danh sách tất cả job title từ MongoDB
+            job_titles = await self._get_all_job_titles()
             
             # Dự đoán cho mỗi job title
             predictions = {}
@@ -158,7 +154,7 @@ class SchedulerService:
                         additional_data={"job_title": job_title}
                     )
                     continue
-            print(predictions)
+            
             # Lưu kết quả vào MongoDB
             await self._save_to_mongodb(predictions)
             logger.info("Đã hoàn thành quá trình dự đoán và lưu kết quả")

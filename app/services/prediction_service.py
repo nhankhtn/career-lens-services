@@ -8,6 +8,8 @@ import logging
 from app.models.ai_error_log import AIErrorLogModel
 from app.models.career_history import CareerHistoryModel
 from app.models.job_posting import JobPostingModel
+from app.models.company import CompanyModel
+from app.core.database import get_async_database
 
 # Tạo logger
 logger = logging.getLogger(__name__)
@@ -199,9 +201,9 @@ class PredictionService:
             "confidence": round(confidence, 2)
         }
     
-    def _fake_job_postings_prediction_model(self,
-                                           job_title: str,
-                                           skills: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def _fake_job_postings_prediction_model(self,
+                                               job_title: str,
+                                               skills: Optional[List[str]] = None) -> Dict[str, Any]:
         """Fake model to predict job postings for the next week"""
         recent_data = self._get_recent_data(6)
         
@@ -211,12 +213,18 @@ class PredictionService:
         if job_data.empty:
             # If no matching jobs, generate random prediction
             weekly_postings = random.randint(5, 15)
+            total_openings = random.randint(20, 50)  # Tổng số vị trí tuyển dụng
             confidence = 0.5
-            top_companies = ["Company A", "Company B", "Company C", "Company D"]
         else:
             # Calculate base posting count based on historical data
-            # In a real model, we'd analyze the frequency over time
             base_count = len(job_data) / 26  # Divide by 26 weeks (6 months)
+            
+            # Tính tổng số vị trí tuyển dụng từ dữ liệu lịch sử
+            if 'number_of_openings' in job_data.columns:
+                total_openings = job_data['number_of_openings'].sum() / 26
+            else:
+                # Nếu không có dữ liệu, ước tính dựa trên số bài đăng
+                total_openings = base_count * random.uniform(2, 4)
             
             # Skills demand factor
             skills_factor = 1.0
@@ -228,7 +236,6 @@ class PredictionService:
             
             # Seasonality factor (fake) - adjust based on current month
             current_month = datetime.now().month
-            # More jobs in January, June, and September
             seasonality = 1.0 + 0.1 * (current_month in [1, 6, 9])
             
             # Calculate weighted prediction
@@ -239,21 +246,24 @@ class PredictionService:
                 self.postings_weights['seasonality'] * seasonality
             )
             
+            # Tính toán tổng số vị trí tuyển dụng dự đoán
+            total_openings = total_openings * (
+                self.postings_weights['job_title'] +
+                self.postings_weights['skills_demand'] * skills_factor +
+                self.postings_weights['market_growth'] * market_growth +
+                self.postings_weights['seasonality'] * seasonality
+            )
+            
             # Add random variation
             weekly_postings = self._add_random_variation(weekly_postings, 0.15)
+            total_openings = self._add_random_variation(total_openings, 0.15)
             
-            # Ensure at least 1 posting per week
+            # Ensure at least 1 posting per week and reasonable openings
             weekly_postings = max(1, weekly_postings)
+            total_openings = max(weekly_postings, total_openings)  # Đảm bảo tổng số vị trí >= số bài đăng
             
             # Calculate confidence based on amount of data
             confidence = min(0.95, 0.6 + 0.05 * len(job_data))
-            
-            # Extract top companies
-            if 'company_id' in job_data.columns and not job_data['company_id'].empty:
-                company_counts = job_data['company_id'].value_counts().head(4)
-                top_companies = company_counts.index.tolist()
-            else:
-                top_companies = ["Google", "Amazon", "Microsoft", "VNG Corporation"]
         
         # Determine trend (fake)
         trend_options = ["increasing", "stable", "decreasing"]
@@ -262,9 +272,10 @@ class PredictionService:
         
         return {
             "weekly_postings": round(weekly_postings),
+            "total_openings": round(total_openings),
             "trend": trend,
             "confidence": round(confidence, 2),
-            "top_companies": top_companies
+            "average_openings_per_posting": round(total_openings / weekly_postings, 2) if weekly_postings > 0 else 0
         }
     
     async def predict_job_market(self,
@@ -287,7 +298,7 @@ class PredictionService:
             )
             
             # Get job postings prediction
-            job_postings_prediction = self._fake_job_postings_prediction_model(
+            job_postings_prediction = await self._fake_job_postings_prediction_model(
                 job_title=job_title,
                 skills=skills
             )

@@ -30,6 +30,17 @@ class CareerHistoryModel:
         career_history_data["created_at"] = datetime.now()
         career_history_data["updated_at"] = datetime.now()
         
+        # Đảm bảo cấu trúc dữ liệu đúng
+        if "job_postings_prediction" not in career_history_data:
+            career_history_data["job_postings_prediction"] = {}
+            
+        # Thêm các trường mới nếu chưa có
+        job_postings_prediction = career_history_data["job_postings_prediction"]
+        if "total_openings" not in job_postings_prediction:
+            job_postings_prediction["total_openings"] = 0
+        if "average_openings_per_posting" not in job_postings_prediction:
+            job_postings_prediction["average_openings_per_posting"] = 0
+            
         collection = cls.get_async_collection()
         result = await collection.insert_one(career_history_data)
         return str(result.inserted_id)
@@ -56,10 +67,30 @@ class CareerHistoryModel:
         return await cursor.to_list(length=None)
     
     @classmethod
+    async def find_by_date_range(cls, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Find career history predictions within a date range"""
+        collection = cls.get_async_collection()
+        cursor = collection.find({
+            "prediction_date": {
+                "$gte": start_date,
+                "$lte": end_date
+            }
+        }).sort("prediction_date", -1)
+        return await cursor.to_list(length=None)
+    
+    @classmethod
     async def update(cls, id: str, update_data: Dict[str, Any]) -> bool:
         """Update a career history prediction record"""
         # Add updated timestamp
         update_data["updated_at"] = datetime.now()
+        
+        # Đảm bảo cấu trúc dữ liệu đúng
+        if "job_postings_prediction" in update_data:
+            job_postings_prediction = update_data["job_postings_prediction"]
+            if "total_openings" not in job_postings_prediction:
+                job_postings_prediction["total_openings"] = 0
+            if "average_openings_per_posting" not in job_postings_prediction:
+                job_postings_prediction["average_openings_per_posting"] = 0
         
         collection = cls.get_async_collection()
         result = await collection.update_one(
