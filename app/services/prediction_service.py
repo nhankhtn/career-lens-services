@@ -3,15 +3,23 @@ import numpy as np
 import random
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
+import json
+import logging
+from app.models.ai_error_log import AIErrorLogModel
+from app.models.career_history import CareerHistoryModel
+from app.models.job_posting import JobPostingModel
+from app.models.company import CompanyModel
+from app.core.database import get_async_database
+
+# Tạo logger
+logger = logging.getLogger(__name__)
 
 class PredictionService:
     """Service to predict job salaries and postings using fake models with fake weights"""
     
-    def __init__(self, data_file_path: str):
-        """Initialize with data file path"""
-        self.data_file_path = data_file_path
-        self.data = self._load_data()
-        # Fake model weights for salary prediction
+    def __init__(self):
+        """Initialize prediction service"""
+        self.data = None  # Không load data ngay lập tức
         self.salary_weights = {
             'job_title': 0.4,
             'position': 0.3,
@@ -21,7 +29,6 @@ class PredictionService:
             'random_factor': 0.1
         }
         
-        # Fake model weights for job postings prediction
         self.postings_weights = {
             'job_title': 0.35,
             'skills_demand': 0.25,
@@ -29,20 +36,45 @@ class PredictionService:
             'seasonality': 0.1,
             'random_factor': 0.1
         }
+        logger.info("PredictionService đã được khởi tạo")
     
-    def _load_data(self) -> pd.DataFrame:
-        """Load job postings data from CSV file"""
+    async def _load_data(self) -> pd.DataFrame:
+        """Load job postings data from MongoDB"""
         try:
-            df = pd.read_csv(self.data_file_path)
-            # Convert date_posted to datetime
-            df['date_posted'] = pd.to_datetime(df['date_posted'])
-            return df
-        except Exception as e:
-            print(f"Error loading data: {e}")
-            # Return empty DataFrame with expected columns if file can't be loaded
-            return pd.DataFrame(columns=['job_title', 'salary_min', 'salary_max', 
+            # Lấy dữ liệu từ MongoDB
+            cutoff_date = datetime.now() - timedelta(days=30 * 6)
+            job_postings = await JobPostingModel.find_by_date_range(cutoff_date, datetime.now())
+            
+            if not job_postings:
+                logger.warning("Không tìm thấy dữ liệu job postings trong MongoDB")
+                return pd.DataFrame(columns=['job_title', 'salary_min', 'salary_max', 
                                          'company_id', 'job_description', 'position', 
                                          'yof', 'date_posted', 'skills'])
+            
+            # Chuyển đổi dữ liệu MongoDB thành DataFrame
+            data = []
+            for posting in job_postings:
+                data.append({
+                    'job_title': posting.get('job_title'),
+                    'salary_min': posting.get('salary_min'),
+                    'salary_max': posting.get('salary_max'),
+                    'company_id': posting.get('company_id'),
+                    'job_description': posting.get('job_description'),
+                    'position': posting.get('position'),
+                    'yof': posting.get('yof'),
+                    'date_posted': posting.get('date_posted'),
+                    'skills': posting.get('skills')
+                })
+            
+            df = pd.DataFrame(data)
+            df['date_posted'] = pd.to_datetime(df['date_posted'])
+            return df
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi tải dữ liệu từ MongoDB: {e}")
+            return pd.DataFrame(columns=['job_title', 'salary_min', 'salary_max', 
+                                     'company_id', 'job_description', 'position', 
+                                     'yof', 'date_posted', 'skills'])
     
     def _get_recent_data(self, months: int = 6) -> pd.DataFrame:
         """Get data from the last N months"""
@@ -169,9 +201,9 @@ class PredictionService:
             "confidence": round(confidence, 2)
         }
     
-    def _fake_job_postings_prediction_model(self,
-                                           job_title: str,
-                                           skills: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def _fake_job_postings_prediction_model(self,
+                                               job_title: str,
+                                               skills: Optional[List[str]] = None) -> Dict[str, Any]:
         """Fake model to predict job postings for the next week"""
         recent_data = self._get_recent_data(6)
         
@@ -181,12 +213,18 @@ class PredictionService:
         if job_data.empty:
             # If no matching jobs, generate random prediction
             weekly_postings = random.randint(5, 15)
+            total_openings = random.randint(20, 50)  # Tổng số vị trí tuyển dụng
             confidence = 0.5
-            top_companies = ["Company A", "Company B", "Company C", "Company D"]
         else:
             # Calculate base posting count based on historical data
-            # In a real model, we'd analyze the frequency over time
             base_count = len(job_data) / 26  # Divide by 26 weeks (6 months)
+            
+            # Tính tổng số vị trí tuyển dụng từ dữ liệu lịch sử
+            if 'number_of_openings' in job_data.columns:
+                total_openings = job_data['number_of_openings'].sum() / 26
+            else:
+                # Nếu không có dữ liệu, ước tính dựa trên số bài đăng
+                total_openings = base_count * random.uniform(2, 4)
             
             # Skills demand factor
             skills_factor = 1.0
@@ -198,7 +236,6 @@ class PredictionService:
             
             # Seasonality factor (fake) - adjust based on current month
             current_month = datetime.now().month
-            # More jobs in January, June, and September
             seasonality = 1.0 + 0.1 * (current_month in [1, 6, 9])
             
             # Calculate weighted prediction
@@ -209,21 +246,24 @@ class PredictionService:
                 self.postings_weights['seasonality'] * seasonality
             )
             
+            # Tính toán tổng số vị trí tuyển dụng dự đoán
+            total_openings = total_openings * (
+                self.postings_weights['job_title'] +
+                self.postings_weights['skills_demand'] * skills_factor +
+                self.postings_weights['market_growth'] * market_growth +
+                self.postings_weights['seasonality'] * seasonality
+            )
+            
             # Add random variation
             weekly_postings = self._add_random_variation(weekly_postings, 0.15)
+            total_openings = self._add_random_variation(total_openings, 0.15)
             
-            # Ensure at least 1 posting per week
+            # Ensure at least 1 posting per week and reasonable openings
             weekly_postings = max(1, weekly_postings)
+            total_openings = max(weekly_postings, total_openings)  # Đảm bảo tổng số vị trí >= số bài đăng
             
             # Calculate confidence based on amount of data
             confidence = min(0.95, 0.6 + 0.05 * len(job_data))
-            
-            # Extract top companies
-            if 'company_id' in job_data.columns and not job_data['company_id'].empty:
-                company_counts = job_data['company_id'].value_counts().head(4)
-                top_companies = company_counts.index.tolist()
-            else:
-                top_companies = ["Google", "Amazon", "Microsoft", "VNG Corporation"]
         
         # Determine trend (fake)
         trend_options = ["increasing", "stable", "decreasing"]
@@ -232,18 +272,23 @@ class PredictionService:
         
         return {
             "weekly_postings": round(weekly_postings),
+            "total_openings": round(total_openings),
             "trend": trend,
             "confidence": round(confidence, 2),
-            "top_companies": top_companies
+            "average_openings_per_posting": round(total_openings / weekly_postings, 2) if weekly_postings > 0 else 0
         }
     
-    def predict_job_market(self,
+    async def predict_job_market(self,
                           job_title: str,
                           position: Optional[str] = None,
                           experience_level: Optional[str] = None,
                           skills: Optional[List[str]] = None) -> Dict[str, Any]:
         """Generate predictions for job salary and postings"""
         try:
+            # Load data nếu chưa có
+            if self.data is None:
+                self.data = await self._load_data()
+            
             # Get salary prediction
             salary_prediction = self._fake_salary_prediction_model(
                 job_title=job_title,
@@ -253,7 +298,7 @@ class PredictionService:
             )
             
             # Get job postings prediction
-            job_postings_prediction = self._fake_job_postings_prediction_model(
+            job_postings_prediction = await self._fake_job_postings_prediction_model(
                 job_title=job_title,
                 skills=skills
             )
@@ -272,4 +317,129 @@ class PredictionService:
                 "message": str(e),
                 "prediction_date": datetime.now(),
                 "job_title": job_title
-            } 
+            }
+
+    async def _get_popular_job_titles(self, limit: int = 10) -> List[str]:
+        try:
+            cutoff_date = datetime.now() - timedelta(days=30 * 6)
+            job_postings = await JobPostingModel.find_by_date_range(cutoff_date, datetime.now())
+            
+            if not job_postings:
+                logger.warning("Không tìm thấy dữ liệu job postings trong MongoDB")
+                await self._save_error_log(
+                    error_type="DataNotFound",
+                    error_message="Không tìm thấy dữ liệu job postings trong MongoDB",
+                    source="get_popular_job_titles",
+                    additional_data={"limit": limit}
+                )
+                return ["Data Scientist", "Software Engineer", "Frontend Developer", 
+                        "Backend Developer", "DevOps Engineer"]
+            
+            # ... rest of the code ...
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi lấy job titles phổ biến từ MongoDB: {e}")
+            await self._save_error_log(
+                error_type="DatabaseError",
+                error_message=str(e),
+                source="get_popular_job_titles",
+                stack_trace=str(e.__traceback__),
+                additional_data={"limit": limit}
+            )
+            return ["Data Scientist", "Software Engineer", "Frontend Developer", 
+                    "Backend Developer", "DevOps Engineer"]
+
+    async def _save_to_mongodb(self, predictions: Dict[str, Any]):
+        try:
+            for job_title, prediction in predictions.items():
+                career_history_data = {
+                    "job_title": job_title,
+                    "status": prediction["status"],
+                    "prediction_date": datetime.strptime(prediction["prediction_date"], "%Y-%m-%d %H:%M:%S") 
+                        if isinstance(prediction["prediction_date"], str) else prediction["prediction_date"],
+                    "salary_prediction": prediction["salary_prediction"],
+                    "job_postings_prediction": prediction["job_postings_prediction"]
+                }
+                
+                await CareerHistoryModel.create(career_history_data)
+                
+            logger.info("Đã lưu kết quả dự đoán vào MongoDB")
+        except Exception as e:
+            logger.error(f"Lỗi khi lưu kết quả dự đoán vào MongoDB: {e}")
+            await self._save_error_log(
+                error_type="DatabaseError",
+                error_message=str(e),
+                source="save_to_mongodb",
+                stack_trace=str(e.__traceback__),
+                additional_data={"predictions_count": len(predictions)}
+            )
+
+    async def _run_daily_predictions(self):
+        logger.info(f"Đang chạy dự đoán hàng ngày: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        try:
+            job_titles = await self._get_popular_job_titles()
+            date_str = datetime.now().strftime('%Y-%m-%d')
+            file_path = self.predictions_dir / f"predictions_{date_str}.json"
+            
+            predictions = {}
+            for job_title in job_titles:
+                try:
+                    prediction = await self.predict_job_market(
+                        job_title=job_title
+                    )
+                    
+                    if isinstance(prediction.get('prediction_date'), datetime):
+                        prediction['prediction_date'] = prediction['prediction_date'].strftime('%Y-%m-%d %H:%M:%S')
+                        
+                    predictions[job_title] = prediction
+                except Exception as e:
+                    logger.error(f"Lỗi khi dự đoán cho job title {job_title}: {e}")
+                    await self._save_error_log(
+                        error_type="PredictionError",
+                        error_message=str(e),
+                        source="run_daily_predictions",
+                        stack_trace=str(e.__traceback__),
+                        additional_data={"job_title": job_title}
+                    )
+                    continue
+            
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(predictions, f, ensure_ascii=False, indent=2)
+                logger.info(f"Đã lưu kết quả dự đoán vào file: {file_path}")
+            except Exception as e:
+                logger.error(f"Lỗi khi lưu kết quả dự đoán vào file: {e}")
+                await self._save_error_log(
+                    error_type="FileError",
+                    error_message=str(e),
+                    source="run_daily_predictions",
+                    stack_trace=str(e.__traceback__),
+                    additional_data={"file_path": str(file_path)}
+                )
+            
+            await self._save_to_mongodb(predictions)
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi chạy dự đoán hàng ngày: {e}")
+            await self._save_error_log(
+                error_type="SystemError",
+                error_message=str(e),
+                source="run_daily_predictions",
+                stack_trace=str(e.__traceback__)
+            )
+
+    async def _save_error_log(self, error_type: str, error_message: str, source: str, stack_trace: str = None, additional_data: dict = None):
+        """Lưu log lỗi vào MongoDB"""
+        try:
+            error_log = ErrorLogModel(
+                error_type=error_type,
+                error_message=error_message,
+                source=source,
+                stack_trace=stack_trace,
+                additional_data=additional_data
+            )
+            await error_log.save()
+            logger.error(f"Đã lưu log lỗi: {error_type} - {error_message}")
+        except Exception as e:
+            logger.error(f"Lỗi khi lưu log: {e}") 
