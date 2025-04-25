@@ -13,6 +13,8 @@ from app.services.prediction_service import PredictionService
 from app.models.career_history import CareerHistoryModel
 from app.models.job_posting import JobPostingModel
 from app.models.ai_error_log import AIErrorLogModel
+from app.models.career import CareerModel
+from app.core.database import get_async_database
 
 # Cấu hình logging
 logging.basicConfig(
@@ -42,11 +44,31 @@ class SchedulerService:
     async def _get_all_job_titles(self) -> List[str]:
         """Lấy tất cả các job title duy nhất từ MongoDB"""
         try:
-            # Lấy tất cả dữ liệu từ MongoDB
-            job_postings = await JobPostingModel.find_all()
+            # Lấy dữ liệu từ MongoDB trong 6 tháng gần nhất
+            cutoff_date = datetime.now() - timedelta(days=30 * 6)
+            db = await get_async_database()
+            collection = db["job_postings"]
+            
+            # Tạo query để lấy job postings trong khoảng thời gian
+            query = {
+                "date_posted": {
+                    "$gte": cutoff_date,
+                    "$lte": datetime.now()
+                }
+            }
+            
+            # Thực hiện query
+            cursor = collection.find(query)
+            job_postings = await cursor.to_list(length=None)
             
             if not job_postings:
                 logger.warning("Không tìm thấy dữ liệu job postings trong MongoDB")
+                await self._save_error_log(
+                    error_type="DataNotFound",
+                    error_message="Không tìm thấy dữ liệu job postings trong MongoDB",
+                    source="_get_all_job_titles",
+                    additional_data={"cutoff_date": str(cutoff_date)}
+                )
                 return []
             
             # Lấy tất cả các job title duy nhất
@@ -62,14 +84,28 @@ class SchedulerService:
             
         except Exception as e:
             logger.error(f"Lỗi khi lấy job titles từ MongoDB: {e}")
+            await self._save_error_log(
+                error_type="DatabaseError",
+                error_message=str(e),
+                source="_get_all_job_titles",
+                stack_trace=str(e.__traceback__),
+                additional_data={"cutoff_date": str(cutoff_date) if 'cutoff_date' in locals() else None}
+            )
             return []
     
     async def _save_to_mongodb(self, predictions: Dict[str, Any]):
         """Lưu kết quả dự đoán vào MongoDB"""
         try:
             for job_title, prediction in predictions.items():
+                # Lấy position_id (career_id) từ job posting data
+                job_posting = await JobPostingModel.find_by_job_title(job_title)
+                if not job_posting or not job_posting.get("position_id"):
+                    logger.warning(f"Không tìm thấy position_id cho job title: {job_title}")
+                    continue
+
                 # Create document for MongoDB
                 career_history_data = {
+                    "career_id": job_posting["position_id"],  # Sử dụng position_id làm career_id
                     "job_title": job_title,
                     "status": prediction["status"],
                     "prediction_date": datetime.strptime(prediction["prediction_date"], "%Y-%m-%d %H:%M:%S") 
@@ -84,6 +120,13 @@ class SchedulerService:
             logger.info("Đã lưu kết quả dự đoán vào MongoDB")
         except Exception as e:
             logger.error(f"Lỗi khi lưu kết quả dự đoán vào MongoDB: {e}")
+            await self._save_error_log(
+                error_type="DatabaseError",
+                error_message=str(e),
+                source="save_to_mongodb",
+                stack_trace=str(e.__traceback__),
+                additional_data={"predictions_count": len(predictions)}
+            )
     
     def start_scheduler(self):
         if self.scheduler_thread and self.scheduler_thread.is_alive():
@@ -121,6 +164,13 @@ class SchedulerService:
             self.loop.create_task(self._run_daily_predictions())
         except Exception as e:
             logger.error(f"Lỗi khi chạy dự đoán hàng ngày: {e}")
+            # Tạo task để log lỗi vào MongoDB
+            self.loop.create_task(self._save_error_log(
+                error_type="CronJobError",
+                error_message=str(e),
+                source="_run_daily_predictions_sync",
+                stack_trace=str(e.__traceback__)
+            ))
     
     async def _run_daily_predictions(self):
         """Chạy dự đoán hàng ngày cho tất cả các job title"""
@@ -162,10 +212,11 @@ class SchedulerService:
         except Exception as e:
             logger.error(f"Lỗi khi chạy dự đoán hàng ngày: {e}")
             await self._save_error_log(
-                error_type="SystemError",
+                error_type="CronJobError",
                 error_message=str(e),
                 source="run_daily_predictions",
-                stack_trace=str(e.__traceback__)
+                stack_trace=str(e.__traceback__),
+                additional_data={"total_job_titles": len(job_titles) if 'job_titles' in locals() else 0}
             )
     
     def stop_scheduler(self):
@@ -215,7 +266,7 @@ class SchedulerService:
     async def _save_error_log(self, error_type: str, error_message: str, source: str, stack_trace: str = None, additional_data: dict = None):
         """Lưu log lỗi vào MongoDB"""
         try:
-            error_log = ErrorLogModel(
+            error_log = AIErrorLogModel(
                 error_type=error_type,
                 error_message=error_message,
                 source=source,
