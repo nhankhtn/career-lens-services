@@ -26,6 +26,6 @@ class CareerGuidanceRequest(BaseModel):
 class CareerGuidanceResponse(BaseModel):
     """Response model for career guidance"""
     status: str
-    guidance: Optional[List[str]] = None
+    guidance: Optional[str] = None
     message: Optional[str] = None
     relevant_jobs_count: Optional[int] = None 
