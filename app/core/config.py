@@ -19,6 +19,10 @@ X_API_KEY = os.getenv("X_API_KEY")
 if not X_API_KEY:
     raise ValueError("X_API_KEY environment variable is not set")
 
+# JWT settings
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise ValueError("JWT_SECRET environment variable is not set")
 
 # Data settings
 DATA_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "IT_jobs_postings.csv") 

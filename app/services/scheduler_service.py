@@ -1,19 +1,16 @@
 import time
-import schedule
 import threading
-import json
 import asyncio
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
 import logging
+from datetime import datetime, timedelta
 from pathlib import Path
 import os
+from typing import Dict, Any, List
 
 from app.services.prediction_service import PredictionService
 from app.models.career_history import CareerHistoryModel
 from app.models.job_posting import JobPostingModel
 from app.models.ai_error_log import AIErrorLogModel
-from app.models.career import CareerModel
 from app.core.database import get_async_database
 
 # Cấu hình logging
@@ -22,24 +19,134 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-# Tạo logger
 logger = logging.getLogger(__name__)
 
 class SchedulerService:
-    """Dịch vụ chạy ngầm để dự đoán tiền lương và số lượng bài đăng tuyển dụng hàng ngày"""
-    
     def __init__(self):
-        """Khởi tạo dịch vụ"""
+        logger.info("Khởi tạo SchedulerService")
         self.prediction_service = PredictionService()
         self.stop_event = threading.Event()
         self.scheduler_thread = None
-        self.loop = None  # Thêm biến để lưu event loop
         
         # Tạo thư mục để lưu kết quả dự đoán
         self.predictions_dir = Path(os.path.dirname(os.path.dirname(__file__))) / "data" / "predictions"
-        self.predictions_dir.mkdir(exist_ok=True, parents=True)
+        self.predictions_dir.mkdir(parents=True, exist_ok=True)
         
         logger.info("SchedulerService đã được khởi tạo")
+
+    def start_scheduler(self):
+        """Khởi động scheduler"""
+        logger.info("Bắt đầu khởi động scheduler")
+        
+        if self.scheduler_thread and self.scheduler_thread.is_alive():
+            logger.info("Scheduler đã đang chạy")
+            return
+        
+        def run_scheduler():
+            logger.info("Thread scheduler đã bắt đầu")
+            
+            # Tạo event loop mới cho thread này
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            async def main():
+                logger.info("Bắt đầu vòng lặp chính async")
+                
+                # Chạy dự đoán ngay lập tức
+                logger.info("Chạy dự đoán lần đầu")
+                try:
+                    await self.run_prediction()
+                    logger.info("Đã chạy dự đoán lần đầu")
+                except Exception as e:
+                    logger.error(f"Lỗi khi chạy dự đoán lần đầu: {e}")
+                
+                # Tiếp tục chạy dự đoán mỗi giây
+                while not self.stop_event.is_set():
+                    try:
+                        # Đợi một chút trước khi chạy lại
+                        logger.info("Đợi 1 giây trước khi chạy dự đoán tiếp")
+                        await asyncio.sleep(1)  # Dùng asyncio.sleep thay vì time.sleep
+                        
+                        if self.stop_event.is_set():
+                            break
+                        
+                        logger.info("Bắt đầu chạy dự đoán định kỳ")
+                        await self.run_prediction()
+                        logger.info("Đã chạy dự đoán định kỳ")
+                    except Exception as e:
+                        logger.error(f"Lỗi trong vòng lặp chính: {e}")
+                        await asyncio.sleep(1)  # Đợi một chút trước khi thử lại
+                
+                logger.info("Kết thúc vòng lặp chính async")
+            
+            # Tạo task và chạy event loop
+            loop.create_task(main())
+            
+            # Chạy event loop mãi mãi
+            try:
+                loop.run_forever()
+            except Exception as e:
+                logger.error(f"Lỗi trong event loop: {e}")
+            finally:
+                loop.close()
+                logger.info("Đã đóng event loop")
+            
+            logger.info("Thread scheduler đã dừng")
+        
+        # Tạo và chạy thread
+        self.scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+        self.scheduler_thread.start()
+        
+        logger.info("Scheduler đã được khởi động")
+
+    async def run_prediction(self):
+        """Chạy một lần dự đoán"""
+        logger.info("Bắt đầu chạy dự đoán")
+        try:
+            # Lấy tất cả job titles
+            job_titles = await self._get_all_job_titles()
+            logger.info(f"Đã lấy được {len(job_titles)} job titles")
+            
+            if not job_titles:
+                logger.warning("Không có job titles để dự đoán")
+                return
+            
+            # Dự đoán cho mỗi job title
+            predictions = {}
+            for job_title in job_titles:
+                try:
+                    logger.info(f"Đang dự đoán cho job title: {job_title}")
+                    prediction = await self.prediction_service.predict_job_market(job_title=job_title)
+                    
+                    if isinstance(prediction.get('prediction_date'), datetime):
+                        prediction['prediction_date'] = prediction['prediction_date'].strftime('%Y-%m-%d %H:%M:%S')
+                    
+                    predictions[job_title] = prediction
+                    logger.info(f"Đã hoàn thành dự đoán cho {job_title}")
+                except Exception as e:
+                    logger.error(f"Lỗi khi dự đoán cho job title {job_title}: {e}")
+                    await self._save_error_log(
+                        error_type="PredictionError",
+                        error_message=str(e),
+                        source="run_prediction",
+                        additional_data={"job_title": job_title}
+                    )
+            
+            # Lưu kết quả vào MongoDB
+            if predictions:
+                logger.info(f"Lưu {len(predictions)} dự đoán vào MongoDB")
+                await self._save_to_mongodb(predictions)
+                logger.info("Đã lưu dự đoán vào MongoDB")
+            else:
+                logger.warning("Không có dự đoán để lưu")
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi chạy dự đoán: {e}")
+            await self._save_error_log(
+                error_type="PredictionRunError",
+                error_message=str(e),
+                source="run_prediction"
+            )
     
     async def _get_all_job_titles(self) -> List[str]:
         """Lấy tất cả các job title duy nhất từ MongoDB"""
@@ -88,11 +195,10 @@ class SchedulerService:
                 error_type="DatabaseError",
                 error_message=str(e),
                 source="_get_all_job_titles",
-                stack_trace=str(e.__traceback__),
                 additional_data={"cutoff_date": str(cutoff_date) if 'cutoff_date' in locals() else None}
             )
             return []
-    
+
     async def _save_to_mongodb(self, predictions: Dict[str, Any]):
         """Lưu kết quả dự đoán vào MongoDB"""
         try:
@@ -123,110 +229,20 @@ class SchedulerService:
             await self._save_error_log(
                 error_type="DatabaseError",
                 error_message=str(e),
-                source="save_to_mongodb",
-                stack_trace=str(e.__traceback__),
+                source="_save_to_mongodb",
                 additional_data={"predictions_count": len(predictions)}
             )
     
-    def start_scheduler(self):
-        if self.scheduler_thread and self.scheduler_thread.is_alive():
-            logger.info("Dịch vụ dự đoán đã được khởi động")
-            return
-
-        self.loop = asyncio.new_event_loop()
-
-        # Tạo thread chạy event loop
-        def loop_thread():
-            asyncio.set_event_loop(self.loop)
-            self.loop.run_forever()
-
-        threading.Thread(target=loop_thread, daemon=True).start()
-
-        # Đặt lịch với schedule
-        schedule.every(1).minutes.do(
-            lambda: asyncio.run_coroutine_threadsafe(self._run_daily_predictions(), self.loop)
-        )
-
-        # Tạo thread chạy schedule
-        def run_scheduler():
-            while not self.stop_event.is_set():
-                schedule.run_pending()
-                time.sleep(1)
-
-        self.scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-        self.scheduler_thread.start()
-
-    def _run_daily_predictions_sync(self):
-        """Chạy dự đoán hàng ngày (synchronous version)"""
-        try:
-            logger.info(f"Bắt đầu chạy dự đoán: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            # Chạy async function trong event loop hiện tại mà không block
-            self.loop.create_task(self._run_daily_predictions())
-        except Exception as e:
-            logger.error(f"Lỗi khi chạy dự đoán hàng ngày: {e}")
-            # Tạo task để log lỗi vào MongoDB
-            self.loop.create_task(self._save_error_log(
-                error_type="CronJobError",
-                error_message=str(e),
-                source="_run_daily_predictions_sync",
-                stack_trace=str(e.__traceback__)
-            ))
-    
-    async def _run_daily_predictions(self):
-        """Chạy dự đoán hàng ngày cho tất cả các job title"""
-        logger.info(f"Đang chạy dự đoán hàng ngày: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        try:
-            # Lấy danh sách tất cả job title từ MongoDB
-            job_titles = await self._get_all_job_titles()
-            
-            # Dự đoán cho mỗi job title
-            predictions = {}
-            for job_title in job_titles:
-                try:
-                    logger.info(f"Đang dự đoán cho job title: {job_title}")
-                    prediction = await self.prediction_service.predict_job_market(
-                        job_title=job_title
-                    )
-                    
-                    if isinstance(prediction.get('prediction_date'), datetime):
-                        prediction['prediction_date'] = prediction['prediction_date'].strftime('%Y-%m-%d %H:%M:%S')
-                        
-                    predictions[job_title] = prediction
-                    logger.info(f"Đã hoàn thành dự đoán cho {job_title}")
-                except Exception as e:
-                    logger.error(f"Lỗi khi dự đoán cho job title {job_title}: {e}")
-                    await self._save_error_log(
-                        error_type="PredictionError",
-                        error_message=str(e),
-                        source="run_daily_predictions",
-                        stack_trace=str(e.__traceback__),
-                        additional_data={"job_title": job_title}
-                    )
-                    continue
-            
-            # Lưu kết quả vào MongoDB
-            await self._save_to_mongodb(predictions)
-            logger.info("Đã hoàn thành quá trình dự đoán và lưu kết quả")
-            
-        except Exception as e:
-            logger.error(f"Lỗi khi chạy dự đoán hàng ngày: {e}")
-            await self._save_error_log(
-                error_type="CronJobError",
-                error_message=str(e),
-                source="run_daily_predictions",
-                stack_trace=str(e.__traceback__),
-                additional_data={"total_job_titles": len(job_titles) if 'job_titles' in locals() else 0}
-            )
-    
     def stop_scheduler(self):
-        """Dừng dịch vụ chạy ngầm"""
+        """Dừng scheduler"""
+        logger.info("Dừng scheduler")
         self.stop_event.set()
+        
         if self.scheduler_thread:
             self.scheduler_thread.join(timeout=5)
-        if self.loop:
-            self.loop.close()
-        logger.info("Dịch vụ dự đoán đã dừng")
+            logger.info("Scheduler thread đã dừng")
+        
+        logger.info("Scheduler đã dừng")
     
     async def get_latest_predictions(self, limit: int = 10) -> Dict[str, Any]:
         """Lấy kết quả dự đoán gần nhất từ MongoDB"""
@@ -263,14 +279,13 @@ class SchedulerService:
             logger.error(f"Lỗi khi lấy dự đoán từ MongoDB: {e}")
             return {"status": "error", "message": str(e)}
     
-    async def _save_error_log(self, error_type: str, error_message: str, source: str, stack_trace: str = None, additional_data: dict = None):
+    async def _save_error_log(self, error_type: str, error_message: str, source: str, additional_data: dict = None):
         """Lưu log lỗi vào MongoDB"""
         try:
             error_log = AIErrorLogModel(
                 error_type=error_type,
                 error_message=error_message,
                 source=source,
-                stack_trace=stack_trace,
                 additional_data=additional_data
             )
             await error_log.save()
