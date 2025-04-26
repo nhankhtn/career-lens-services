@@ -34,8 +34,7 @@ async def get_career_guidance(
     if response["status"] == "error":
         raise HTTPException(status_code=500, detail=response["message"])
     
-    # Parse guidance string into an array using '\n' as separator
-    if response.get("guidance"):
-        response["guidance"] = response["guidance"].split('\n')
+    # No longer need to split the guidance into an array
+    # The guidance is already a string from the OpenAI service
     
     return response
