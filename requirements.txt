@@ -9,3 +9,4 @@ numpy
 pymongo
 motor
 dnspython 
+PyJWT
