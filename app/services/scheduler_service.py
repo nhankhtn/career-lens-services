@@ -75,7 +75,7 @@ class SchedulerService:
                         logger.info("Đã chạy dự đoán định kỳ")
                     except Exception as e:
                         logger.error(f"Lỗi trong vòng lặp chính: {e}")
-                        await asyncio.sleep(1)  # Đợi một chút trước khi thử lại
+                        await asyncio.sleep(3600)  # Đợi một chút trước khi thử lại
                 
                 logger.info("Kết thúc vòng lặp chính async")
             

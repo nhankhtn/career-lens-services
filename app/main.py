@@ -37,31 +37,32 @@ app.include_router(career_guidance.router)
 # Khởi tạo scheduler
 scheduler = SchedulerService()
 
-@app.on_event("startup")
-def startup_event():
-    """Initialize database connection and start scheduler when app starts"""
-    logger.info("Bắt đầu khởi động app")
-    try:
-        # Test synchronous database connection
-        db = get_database()
-        logger.info("Successfully connected to synchronous database")
+# @app.on_event("startup")
+# def startup_event():
+#     """Initialize database connection and start scheduler when app starts"""
+#     logger.info("Bắt đầu khởi động app")
+#     try:
+#         # Test synchronous database connection
+#         db = get_database()
+#         logger.info("Successfully connected to synchronous database")
         
-        # Test asynchronous database connection
-        async_db = get_async_database()
-        logger.info("Successfully connected to asynchronous database")
+#         # Test asynchronous database connection
+#         async_db = get_async_database()
+#         logger.info("Successfully connected to asynchronous database")
         
-        # Khởi động scheduler
-        logger.info("Đang khởi động scheduler...")
-        scheduler.start_scheduler()   # KHÔNG await
-        logger.info("Scheduler đã được khởi động thành công")
+#         # Khởi động scheduler
+#         logger.info("Đang khởi động scheduler...")
+#         scheduler.start_scheduler()   # KHÔNG await
+#         logger.info("Scheduler đã được khởi động thành công")
         
-    except Exception as e:
-        logger.error(f"Lỗi khi khởi động: {e}")
-        raise
+#     except Exception as e:
+#         logger.error(f"Lỗi khi khởi động: {e}")
+#         raise
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the IT Career Guidance & Job Market Prediction API"}
+    # print(f"Connected to database: {db_name}")
+    return {"message": "Welcome to the IT Career Guidance & Job Market Prediction API"} 
 
 @app.on_event("shutdown")
 def shutdown_event():
@@ -78,5 +79,5 @@ def shutdown_event():
         logger.info("Database connections closed")
         
     except Exception as e:
-        logger.error(f"Lỗi khi dừng app: {e}")
+        logger.error(f"Error during shutdown: {str(e)}")
         raise

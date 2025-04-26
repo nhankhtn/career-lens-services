@@ -3,17 +3,23 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 from datetime import datetime
 from typing import Optional
+from starlette.middleware.base import BaseHTTPMiddleware
 from app.core.config import JWT_SECRET, X_API_KEY
 
-class AuthMiddleware:
-    def __init__(self):
+class AuthMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app):
+        super().__init__(app)
         self.security = HTTPBearer()
 
-    async def __call__(self, request: Request):
+    async def dispatch(self, request: Request, call_next):
+        # Bỏ qua xác thực cho một số endpoint nếu cần
+        if request.url.path == "/" or request.url.path.startswith("/docs") or request.url.path.startswith("/openapi"):
+            return await call_next(request)
+
         # Kiểm tra x-api-key trong header
         api_key = request.headers.get("x-api-key")
         if api_key and api_key == X_API_KEY:
-            return
+            return await call_next(request)
 
         # Kiểm tra JWT token
         try:
@@ -22,8 +28,9 @@ class AuthMiddleware:
                 raise HTTPException(status_code=401, detail="Missing Authorization header")
 
             # Lấy token từ header
-            credentials: HTTPAuthorizationCredentials = self.security(request)
-            token = credentials.credentials
+            scheme, token = auth_header.split()
+            if scheme.lower() != "bearer":
+                raise HTTPException(status_code=401, detail="Invalid authentication scheme")
 
             # Giải mã token
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
@@ -36,7 +43,7 @@ class AuthMiddleware:
 
             # Lưu thông tin user vào request state
             request.state.user = payload
-            return
+            return await call_next(request)
 
         except jwt.ExpiredSignatureError:
             raise HTTPException(status_code=401, detail="Token has expired")

@@ -31,13 +31,13 @@ class OpenAIService:
         # Find relevant job postings
         relevant_jobs = []
         for job in jobs_data:
-            if target_job.lower() in job['Job Title'].lower():
+            if target_job.lower() in job['job_title'].lower():
                 relevant_jobs.append(job)
         
         # If no exact matches, include jobs that might be related
         if not relevant_jobs:
             for job in jobs_data:
-                if any(keyword in job['Job Title'].lower() for keyword in target_job.lower().split()):
+                if any(keyword in job['job_title'].lower() for keyword in target_job.lower().split()):
                     relevant_jobs.append(job)
         
         # Prepare user profile
