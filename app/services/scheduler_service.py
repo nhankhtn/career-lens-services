@@ -75,7 +75,7 @@ class SchedulerService:
                         logger.info("Đã chạy dự đoán định kỳ")
                     except Exception as e:
                         logger.error(f"Lỗi trong vòng lặp chính: {e}")
-                        await asyncio.sleep(3600)  # Đợi một chút trước khi thử lại
+                        await asyncio.sleep(1)  # Đợi một chút trước khi thử lại
                 
                 logger.info("Kết thúc vòng lặp chính async")
             
@@ -153,20 +153,25 @@ class SchedulerService:
         try:
             # Lấy dữ liệu từ MongoDB trong 6 tháng gần nhất
             cutoff_date = datetime.now() - timedelta(days=30 * 6)
-            db = await get_async_database()
-            collection = db["job_postings"]
+            logger.info("Đang kết nối đến MongoDB...")
+            db = get_async_database()  # Không dùng await ở đây
+            logger.info("Đã kết nối thành công đến MongoDB")
+            
+            collection = db["job-postings"]
+            logger.info(f"Đã chọn collection: job-postings")
             
             # Tạo query để lấy job postings trong khoảng thời gian
             query = {
-                "date_posted": {
-                    "$gte": cutoff_date,
-                    "$lte": datetime.now()
-                }
+                # "date_posted": {
+                #     "$gte": cutoff_date
+                # }
             }
+            logger.info(f"Đang thực hiện query với cutoff_date: {cutoff_date}")
             
             # Thực hiện query
             cursor = collection.find(query)
             job_postings = await cursor.to_list(length=None)
+            logger.info(f"Đã lấy được {len(job_postings)} job postings từ MongoDB")
             
             if not job_postings:
                 logger.warning("Không tìm thấy dữ liệu job postings trong MongoDB")
@@ -288,7 +293,12 @@ class SchedulerService:
                 source=source,
                 additional_data=additional_data
             )
-            await error_log.save()
+            await error_log.save(error_data={
+                "error_type": error_type,
+                "error_message": error_message,
+                "source": source,
+                "additional_data": additional_data
+            })
             logger.error(f"Đã lưu log lỗi: {error_type} - {error_message}")
         except Exception as e:
             logger.error(f"Lỗi khi lưu log: {e}")
